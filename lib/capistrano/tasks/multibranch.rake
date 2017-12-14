@@ -1,4 +1,9 @@
 namespace :multibranch do
+  desc 'Setup deploy_to for multideployment'
+  task :set_deploy_to do
+    set :deploy_to, File.join(fetch(:deploy_to), fetch(:branch_normalized))
+  end
+
   desc 'Create a new database from template'
   task :create_db do
     on roles(:db) do
@@ -7,7 +12,7 @@ namespace :multibranch do
         info "Database '#{db_name}' already exists!"
       else
         info "Creating database '#{db_name}'..."
-        execute(:psql, "-c 'CREATE DATABASE \"#{db_name}\" TEMPLATE #{fetch(:db_template_name)}'")
+        execute(:psql, "-d #{fetch(:db_template_name)} -c 'CREATE DATABASE \"#{db_name}\" TEMPLATE #{fetch(:db_template_name)}'")
       end
     end
   end
@@ -15,7 +20,10 @@ namespace :multibranch do
   desc 'Remove previously created db'
   task :remove_db do
     on roles(:db) do
-      execute(:psql, "-c 'DROP DATABASE \"#{fetch(:db_name)}\"")
+      db_name = fetch(:db_name)
+      if test(:psql, "-c '' #{db_name}")
+        execute(:psql, "-d #{fetch(:db_template_name)} -c 'DROP DATABASE \"#{fetch(:db_name)}\"'")
+      end
     end
   end
 
@@ -39,7 +47,13 @@ namespace :multibranch do
 
   desc 'Add database name env variable to dotenv file'
   task :set_env_vars do
-    execute("echo \"#{fetch(:db_name_env)}=#{fetch(:db_name)}\" >> #{fetch(:dotenv_file)}")
+    on roles(:app) do
+      within release_path do
+        dotenv = { fetch(:db_name_env) => fetch(:db_name) }.merge(fetch(:dotenv))
+        envs = dotenv.map { |k, v| "#{k.upcase}=#{v}" }.join('\n')
+        execute("echo \"#{envs}\" >> #{fetch(:dotenv_file)}")
+      end
+    end
   end
 
   desc 'Removed deployed branch from server'
@@ -49,24 +63,38 @@ namespace :multibranch do
       execute("rm -rf #{deploy_to}") unless deploy_to == '/' # just to be sure ;)
     end
   end
-  before :cleanup, :remove_db
+end
+
+namespace :deploy do
+  task :restart do
+    on roles(:app), in: :groups, limit: 3, wait: 10 do
+      within release_path do
+        execute :touch, 'tmp/restart.txt'
+        info "Successfully deployed branch '#{fetch(:branch)}' to 'https://#{fetch(:subdomain)}'!"
+      end
+    end
+  end
 end
 
 namespace :load do
   task :defaults do
-    if fetch(:multibranch_deployment)
-      set :branch_normalized, -> { fetch(:branch).gsub(/[^A-Za-z0-9]/, '-') }
-      set :db_name, -> { "#{fetch(:application)}_#{fetch(:branch_normalized)}" }
-      set :deploy_to, -> { File.join(fetch(:deploy_to), fetch(:branch_normalized)) }
-      set :base_domain, 'example.com'
-      set :subdomain, -> { "#{fetch(:branch_normalized)}.#{fetch(:base_domain)}" }
-      set :db_name_env, 'DB_NAME'
-      set :dotenv_file, -> { ".env.#{fetch(:stage)}" }
-
-      before  'deploy:updated',
-              'multibranch:create_db',
-              'multibranch:issue_certificate',
-              'multibranch:set_env_vars'
-    end
+    set :branch, ENV['REVISION'] || ENV['BRANCH_NAME'] || 'master'
+    set :branch_normalized, -> { fetch(:branch).gsub(/[^A-Za-z0-9]/, '-') }
+    set :db_name, -> { "#{fetch(:application)}_#{fetch(:branch_normalized)}" }
+    set :db_template_name, -> { "#{fetch(:application)}_template" }
+    set :db_name_env, 'DB_NAME'
+    set :base_domain, 'example.com'
+    set :subdomain, -> { "#{fetch(:branch_normalized)}.#{fetch(:base_domain)}" }
+    set :dotenv, {}
+    set :dotenv_file, -> { File.join(release_path, ".env.#{fetch(:stage)}.local") }
   end
 end
+
+before  'deploy:starting', 'multibranch:set_deploy_to'
+before  'deploy:migrate', 'multibranch:create_db'
+before  'multibranch:create_db', 'multibranch:set_env_vars'
+before  'deploy:finished', 'multibranch:issue_certificate'
+after   'deploy:finished', 'deploy:restart'
+
+before 'multibranch:remove_db', 'multibranch:set_deploy_to'
+before 'multibranch:cleanup', 'multibranch:remove_db'
