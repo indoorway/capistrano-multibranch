@@ -50,7 +50,7 @@ namespace :multibranch do
     on roles(:app) do
       within release_path do
         dotenv = { fetch(:db_name_env) => fetch(:db_name) }.merge(fetch(:dotenv))
-        envs = dotenv.map { |k, v| "#{k.upcase}=#{v}" }.join('\n')
+        envs = dotenv.map { |k, v| "#{k.to_s.upcase}=#{v}" }.join('\n')
         execute("echo \"#{envs}\" >> #{fetch(:dotenv_file)}")
       end
     end
