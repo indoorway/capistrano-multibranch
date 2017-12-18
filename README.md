@@ -7,7 +7,7 @@ Capistrano plugin for deploying separate application per feature branch. It crea
 Add this line to your application's Gemfile:
 
 ```
-gem 'capistrano-multibranch', github: 'indoorway/capistrano-multibranch', group: :development
+gem 'capistrano-multibranch', github: 'indoorway/capistrano-multibranch', require: false, group: :development
 ```
 
 ## Usage

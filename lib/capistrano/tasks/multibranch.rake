@@ -69,7 +69,7 @@ namespace :deploy do
   task :restart do
     on roles(:app), in: :groups, limit: 3, wait: 10 do
       within release_path do
-        execute :touch, 'tmp/restart.txt'
+        execute(:touch, 'tmp/restart.txt') if test('[ -d tmp ]')
         info "Successfully deployed branch '#{fetch(:branch)}' to 'https://#{fetch(:subdomain)}'!"
       end
     end
@@ -91,7 +91,7 @@ namespace :load do
 end
 
 before  'deploy:starting', 'multibranch:set_deploy_to'
-before  'deploy:migrate', 'multibranch:create_db'
+before  'deploy:updated', 'multibranch:create_db'
 before  'multibranch:create_db', 'multibranch:set_env_vars'
 before  'deploy:finished', 'multibranch:issue_certificate'
 after   'deploy:finished', 'deploy:restart'
