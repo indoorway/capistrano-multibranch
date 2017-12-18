@@ -29,7 +29,7 @@ namespace :multibranch do
 
   desc 'Issue a new SSL certificate for subdomain'
   task :issue_certificate do
-    on roles(:app) do
+    on roles(:web) do
       subdomain = fetch(:subdomain)
       openssl_list = capture("sudo openssl x509 -noout -text -in /etc/letsencrypt/live/master.#{fetch(:base_domain)}/cert.pem | grep DNS")
       current_subdomains = openssl_list.strip.split(', ').map{ |s| s[4..-1] }
@@ -51,14 +51,14 @@ namespace :multibranch do
       within release_path do
         dotenv = { fetch(:db_name_env) => fetch(:db_name) }.merge(fetch(:dotenv))
         envs = dotenv.map { |k, v| "#{k.to_s.upcase}=#{v}" }.join('\n')
-        execute("echo \"#{envs}\" >> #{fetch(:dotenv_file)}")
+        execute("echo -e \"#{envs}\" >> #{fetch(:dotenv_file)}")
       end
     end
   end
 
   desc 'Removed deployed branch from server'
   task :cleanup do
-    on roles(:app) do
+    on roles(:app, :web) do
       deploy_to = fetch(:deploy_to)
       execute("rm -rf #{deploy_to}") unless deploy_to == '/' # just to be sure ;)
     end
