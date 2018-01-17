@@ -79,7 +79,7 @@ end
 namespace :load do
   task :defaults do
     set :branch, ENV['REVISION'] || ENV['BRANCH_NAME'] || 'master'
-    set :branch_normalized, -> { fetch(:branch).gsub(/[^A-Za-z0-9]/, '-') }
+    set :branch_normalized, -> { fetch(:branch).gsub(/[^A-Za-z0-9]/, '-').downcase }
     set :db_name, -> { "#{fetch(:application)}_#{fetch(:branch_normalized)}" }
     set :db_template_name, -> { "#{fetch(:application)}_template" }
     set :db_name_env, 'DB_NAME'
